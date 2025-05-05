@@ -124,6 +124,33 @@ G = nx.DiGraph()
 for (src, dst), w in module_edges.items():
     G.add_edge(src, dst, weight=w)
 
+def _jitter(pos: Dict[str, np.ndarray],
+            min_dist: float = 0.25,
+            max_iter: int = 500):
+    names = list(pos.keys())
+    for _ in range(max_iter):
+        moved = False
+        for i, u in enumerate(names):
+            for v in names[i+1:]:
+                d = pos[u] - pos[v]
+                dist = np.linalg.norm(d)
+                if dist < min_dist:
+                    if dist < 1e-8:
+                        rand_dir = np.random.randn(2)
+                        rand_dir /= np.linalg.norm(rand_dir)
+                        shift_u = 0.5 * min_dist * rand_dir
+                        shift_v = -0.5 * min_dist * rand_dir
+                    else:
+                        shift = 0.5 * (min_dist - dist) * (d / dist)
+                        shift_u, shift_v = shift, -shift
+
+                    pos[u] += shift_u
+                    pos[v] += shift_v
+                    moved = True
+        if not moved:
+            break
+    return pos
+
 
 def compute_layout(graph: nx.DiGraph) -> Dict[str, np.ndarray]:
     """Return node positions with overlap avoidance & centre bias."""
@@ -152,7 +179,8 @@ def compute_layout(graph: nx.DiGraph) -> Dict[str, np.ndarray]:
                 factor = 0.6 + 0.4 * (max_deg - deg[n]) / (max_deg - min_deg)
                 pos[n] = pos[n] * factor
 
-    return pos
+    # 3. Final jitter pass
+    return _jitter(pos)
 
 
 pos = compute_layout(G)
@@ -195,7 +223,6 @@ btn_src_show = Button(ax_btn_src_show, "Show ALL")
 btn_src_hide = Button(ax_btn_src_hide, "Hide ALL")
 btn_dst_show = Button(ax_btn_dst_show, "Show ALL")
 btn_dst_hide = Button(ax_btn_dst_hide, "Hide ALL")
-
 
 def _draw_graph() -> None:
     ax_graph.clear()
@@ -270,7 +297,6 @@ def _draw_graph() -> None:
     )
     ax_graph.axis("off")
     fig.canvas.draw_idle()
-
 
 def _toggle_src(label: str):
     src_active[label] = not src_active[label]
